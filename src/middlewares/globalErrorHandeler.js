@@ -19,6 +19,8 @@ const globalErrorHandler = (err, req, res, next) => {
     success: false,
     message: "Internal server error.",
   });
+
+  console.log(err);
 };
 
 module.exports = globalErrorHandler;

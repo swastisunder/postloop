@@ -1,1 +1,35 @@
-[]
+[
+  {
+    "postId": "4woRsuq1",
+    "userId": "TKPGi1eT",
+    "content": "adi is op",
+    "image": "image-1772983293059-1.jpeg",
+    "likes": [],
+    "likeCount": 0,
+    "isDeleted": false,
+    "deletedBy": null,
+    "createdAt": 1772983293072
+  },
+  {
+    "postId": "eTrGYw1v",
+    "userId": "TKPGi1eT",
+    "content": "adi is op",
+    "image": "image-1772983372946-4.jpeg",
+    "likes": [],
+    "likeCount": 0,
+    "isDeleted": false,
+    "deletedBy": null,
+    "createdAt": 1772983372961
+  },
+  {
+    "postId": "QXCKkW0-",
+    "userId": "TKPGi1eT",
+    "content": "adi is op",
+    "image": "image-1772983409657-6.pdf",
+    "likes": [],
+    "likeCount": 0,
+    "isDeleted": false,
+    "deletedBy": null,
+    "createdAt": 1772983409674
+  }
+]
