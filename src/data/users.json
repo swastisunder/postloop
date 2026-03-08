@@ -1,0 +1,24 @@
+[
+  {
+    "userId": "TKPGi1eT",
+    "name": "ssb",
+    "email": "s@gmail.com",
+    "password": "$2b$10$NCLzekA1lb1VBELTHc4zB.CFgk1TbtK1PA4QCYKsQBFuv6gnUCfEC",
+    "role": "user",
+    "isActive": true,
+    "isDeleted": false,
+    "deletedBy": null,
+    "createdAt": 1772966739381
+  },
+  {
+    "userId": "HQqRCKcx",
+    "name": "adi",
+    "email": "a@gmail.com",
+    "password": "$2b$10$fYe2N2l.NoxBot2yl.KbHeimoWcSLWyCE9N2uFLzxZ.RZ74FAtlhi",
+    "role": "user",
+    "isActive": true,
+    "isDeleted": false,
+    "deletedBy": null,
+    "createdAt": 1772966751846
+  }
+]

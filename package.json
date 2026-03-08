@@ -15,11 +15,20 @@
     "bcrypt": "^6.0.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "joi": "^18.0.2",
+    "express-validation": "^4.1.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
+    "nanoid": "^5.1.6",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "uuid": "^13.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/swastisunder/postloop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/swastisunder/postloop/issues"
+  },
+  "homepage": "https://github.com/swastisunder/postloop#readme"
 }
