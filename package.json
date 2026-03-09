@@ -22,13 +22,5 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "uuid": "^13.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/swastisunder/postloop.git"
-  },
-  "bugs": {
-    "url": "https://github.com/swastisunder/postloop/issues"
-  },
-  "homepage": "https://github.com/swastisunder/postloop#readme"
+  }
 }

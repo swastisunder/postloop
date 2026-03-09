@@ -1,9 +1,8 @@
-const passport = require("passport");
-const { Strategy: JwtStrategy, ExtractJwt } = require("passport-jwt");
 const path = require("path");
+const passport = require("passport");
 
+const { Strategy: JwtStrategy, ExtractJwt } = require("passport-jwt");
 const { readJSON } = require("../utils/fileHandler");
-
 const USER_PATH = path.join(__dirname, "../data/users.json");
 
 const opts = {
@@ -16,10 +15,12 @@ passport.use(
     try {
       const users = readJSON(USER_PATH);
 
-      const user = users.find((u) => u.userId === jwt_payload.userId && !u.isDeleted);
+      const user = users.find(
+        (u) => u.userId === jwt_payload.userId && !u.isDeleted && u.isActive,
+      );
 
       if (!user) return done(null, false);
-      
+
       return done(null, user);
     } catch (error) {
       return done(error, false);

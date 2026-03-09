@@ -1,4 +1,6 @@
-const globalErrorHandler = (err, req, res, next) => {
+exports.globalErrorHandler = (err, req, res, next) => {
+  console.dir(err, { depth: null });
+
   if (err.name === "ValidationError") {
     const message = err.details?.body?.[0]?.message || "Validation failed";
 
@@ -22,5 +24,3 @@ const globalErrorHandler = (err, req, res, next) => {
 
   console.log(err);
 };
-
-module.exports = globalErrorHandler;

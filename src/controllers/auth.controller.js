@@ -1,7 +1,7 @@
+const jwt = require("jsonwebtoken");
 const path = require("path");
 const { nanoid } = require("nanoid");
 const { hash, compare } = require("bcrypt");
-const jwt = require("jsonwebtoken");
 
 const { readJSON, writeJSON } = require("../utils/fileHandler");
 const { ROLES } = require("../constant/role");
@@ -28,7 +28,7 @@ exports.signUp = async (req, res, next) => {
       isActive: true,
       isDeleted: false,
       deletedBy: null,
-      createdAt: Date.now(),
+      createdAt: new Date().toISOString(),
     };
 
     users.push(newUser);
@@ -51,6 +51,12 @@ exports.logIn = async (req, res, next) => {
     const users = readJSON(USER_PATH);
     const user = users.find((u) => u.email === email && !u.isDeleted);
     if (!user)
+      return res.status(404).json({
+        success: false,
+        message: "User not exist",
+      });
+
+    if (!user.isActive)
       return res.status(404).json({
         success: false,
         message: "User not exist",

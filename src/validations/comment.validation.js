@@ -1,13 +1,13 @@
 const { Joi } = require("express-validation");
 
-exports.createPostSchema = {
+exports.createCommentSchema = {
   body: Joi.object({
-    content: Joi.string().trim().min(1).max(1000).required(),
-    image: Joi.string().trim().allow(null, "").optional(),
-  }).unknown(false),
+    comment: Joi.string().trim().min(1).max(500).required(),
+    postId: Joi.string().required(),
+  }),
 };
 
-exports.getPostsSchema = {
+exports.getCommentsSchema = {
   query: Joi.object({
     userId: Joi.string().trim().optional(),
     page: Joi.number().integer().min(1).default(1),
