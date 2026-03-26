@@ -1,5 +1,5 @@
 exports.sanitizedUser = (user) => {
-  const { password, isActive, isDeleted, deletedBy, createdAt, ...safeUser } =
-    user;
-  return safeUser;
+  const obj = user.toObject ? user.toObject() : user;
+  const { password, __v, _id, ...safeUser } = obj;
+  return { userId: _id, ...safeUser };
 };

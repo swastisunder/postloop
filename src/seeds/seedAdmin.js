@@ -1,35 +1,42 @@
-const path = require("path");
+require("dotenv").config();
+const mongoose = require("mongoose");
 const { hash } = require("bcrypt");
-const { nanoid } = require("nanoid");
-const { readJSON, writeJSON } = require("../utils/fileHandler");
+
+const User = require("../models/user.model");
 const { ROLES } = require("../constant/role");
 
-const USER_PATH = path.join(__dirname, "../data/users.json");
-
 const seedAdmin = async () => {
-  const users = readJSON(USER_PATH);
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
 
-  const adminExists = users.find((u) => u.role === ROLES.ADMIN);
+    const adminExists = await User.findOne({
+      role: ROLES.ADMIN,
+      isDeleted: false,
+    });
 
-  if (adminExists) return console.log("Admin already exists");
+    if (adminExists) {
+      console.log("Admin already exists");
+      process.exit();
+    }
 
-  const hashedPassword = await hash("admin123", 10);
+    const hashedPassword = await hash("9898", 10);
 
-  const adminUser = {
-    userId: nanoid(8),
-    name: "Admin",
-    email: "admin@gmail.com",
-    password: hashedPassword,
-    role: ROLES.ADMIN,
-    isActive: true,
-    isDeleted: false,
-    createdAt: new Date().toISOString(),
-  };
+    await User.create({
+      name: "Admin",
+      email: "admin@gmail.com",
+      password: hashedPassword,
+      role: ROLES.ADMIN,
+      isActive: true,
+      isDeleted: false,
+      deletedBy: null,
+    });
 
-  users.push(adminUser);
-  writeJSON(USER_PATH, users);
-
-  console.log("Admin user seeded successfully");
+    console.log("Admin seeded successfully");
+    process.exit();
+  } catch (error) {
+    console.error("Seeding failed:", error);
+    process.exit(1);
+  }
 };
 
 seedAdmin();

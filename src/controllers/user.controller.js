@@ -1,189 +1,257 @@
-const { ROLES } = require("../constant/role");
 const ApiError = require("../utils/ApiError");
-const { readJSON, writeJSON } = require("../utils/fileHandler");
-const path = require("path");
+const { ROLES } = require("../constant/role");
 const { sanitizedUser } = require("../utils/sanitizedUser");
+const { successResponse } = require("../utils/ApiResponse");
+const { paginate } = require("../utils/pagination");
 
-const USER_PATH = path.join(__dirname, "../data/users.json");
-const POST_PATH = path.join(__dirname, "../data/posts.json");
+const USER = require("../models/user.model");
+const POST = require("../models/post.model");
+const COMMENT = require("../models/comment.model");
+const { getUser } = require("../utils/dbHelper");
 
-exports.getAllUsers = (req, res, next) => {
+//  GET ALL USERS
+exports.getAllUsers = async (req, res, next) => {
   try {
-    let { page, limit } = req.query;
-
-    page = parseInt(page) || 1;
-    limit = Math.min(parseInt(limit) || 10, 50);
-
-    const users = readJSON(USER_PATH);
-    const totalUsers = users.length;
-
-    if (!totalUsers) return next(new ApiError(404, "No users found"));
-
-    const totalPages = Math.ceil(totalUsers / limit) || 1;
-
-    if (page > totalPages)
-      return next(
-        new ApiError(
-          400,
-          `Page ${page} does not exist. Total pages: ${totalPages}`,
-        ),
-      );
-
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-
-    const paginatedUser = users.slice(startIndex, endIndex);
-
-    res.status(200).json({
-      success: true,
-      page,
-      limit,
-      totalUsers,
-      totalPages,
-      data: paginatedUser,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.getUser = (req, res, next) => {
-  try {
-    const { userId } = req.params;
-
-    const users = readJSON(USER_PATH);
-
-    const user = users.find((u) => u.userId === userId && !u.isDeleted);
-
-    if (!user) return next(new ApiError(404, "User not found"));
-
-    res.status(200).json({
-      success: true,
+    const {
       user,
+      originalUrl,
+      query: { page = 1, limit = 10, email, name },
+    } = req;
+
+    console.log(originalUrl);
+
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+
+    const isAdmin = user.role === ROLES.ADMIN;
+
+    const filter = {
+      isDeleted: false,
+      ...(isAdmin ? {} : { isActive: true }),
+    };
+
+    if (email) filter.email = email.toLowerCase();
+    if (name) filter.name = name;
+
+    const { data, pagination } = await paginate({
+      model: USER,
+      filter,
+      page: pageNum,
+      limit: limitNum,
     });
+
+    const result = {
+      data: data.map(sanitizedUser),
+      pagination,
+    };
+
+    return successResponse(
+      res,
+      200,
+      "Users fetched successfully",
+      result.data,
+      result.pagination,
+    );
   } catch (error) {
     next(error);
   }
 };
 
-exports.newAdmin = (req, res, next) => {
+//  GET SINGLE USER
+exports.getUser = async (req, res, next) => {
   try {
     const { userId } = req.params;
+    const { user } = req;
 
-    const users = readJSON(USER_PATH);
+    const targetUser = await getUser(userId);
 
-    const userIndex = users.findIndex(
-      (u) => u.userId === userId && !u.isDeleted,
+    if (user.role === ROLES.USER && !targetUser.isActive)
+      throw new ApiError(404, "User not found");
+
+    const result = sanitizedUser(targetUser);
+
+    return successResponse(res, 200, "User fetched successfully", result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+//  DELETE USER
+exports.deleteUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { user } = req;
+
+    const adminId = user._id;
+
+    const targetUser = await getUser(userId);
+
+    if (targetUser.role === ROLES.ADMIN)
+      throw new ApiError(403, "Cannot delete an admin");
+
+    targetUser.isDeleted = true;
+    targetUser.isActive = false;
+    targetUser.deletedBy = adminId;
+
+    await targetUser.save();
+
+    const posts = await POST.find(
+      { userId, isDeleted: false },
+      { _id: 1 },
+    ).lean();
+
+    const postIds = posts.map((p) => p._id);
+
+    await POST.updateMany(
+      { userId, isDeleted: false },
+      { isDeleted: true, deletedBy: adminId, updatedAt: new Date() },
     );
 
-    if (userIndex === -1) return next(new ApiError(404, "User not found"));
-
-    if (users[userIndex].role === ROLES.ADMIN)
-      return next(new ApiError(400, "User is already an admin"));
-
-    users[userIndex].role = ROLES.ADMIN;
-
-    writeJSON(USER_PATH, users);
-
-    res.status(200).json({
-      success: true,
-      message: "User promoted to admin successfully",
-      data: sanitizedUser(users[userIndex]),
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.deleteUser = (req, res, next) => {
-  try {
-    const { userId } = req.params;
-
-    const users = readJSON(USER_PATH);
-
-    const userIndex = users.findIndex(
-      (u) => u.userId === userId && !u.isDeleted,
+    await COMMENT.updateMany(
+      { isDeleted: false, $or: [{ userId }, { postId: { $in: postIds } }] },
+      { isDeleted: true, deletedBy: adminId, updatedAt: new Date() },
     );
-    if (userIndex === -1) return next(new ApiError(404, "User not found."));
 
-    if (users[userIndex].role === ROLES.ADMIN)
-      return next(new ApiError(403, "Cannot delete an admin."));
-
-    users[userIndex].isDeleted = true;
-    users[userIndex].isActive = false;
-    users[userIndex].deletedBy = req.user.userId;
-
-    writeJSON(USER_PATH, users);
-
-    res.status(200).json({
-      success: true,
-      message: "User deleted successfully",
-      data: users[userIndex],
-    });
+    return successResponse(res, 200, "User deleted successfully");
   } catch (error) {
     next(error);
   }
 };
 
-exports.getAllPostsOfAUser = (req, res, next) => {
+//  UPDATE USER
+exports.updateUserAction = async (req, res, next) => {
   try {
-    let { page, limit } = req.query;
-    const { userId } = req.params;
+    const { userId, action } = req.params;
 
-    page = parseInt(page) || 1;
-    limit = Math.min(parseInt(limit) || 10, 50);
+    const targetUser = await getUser(userId);
 
-    const posts = readJSON(POST_PATH);
+    switch (action) {
+      case "active":
+        targetUser.isActive = true;
+        break;
 
-    const userPosts = posts.filter((p) => p.userId === userId && !p.isDeleted);
+      case "inactive":
+        targetUser.isActive = false;
+        break;
 
-    if (!userPosts) return next(new ApiError(404, "Posts not found"));
+      case "promote":
+        if (targetUser.role === ROLES.ADMIN)
+          throw new ApiError(409, "User already admin");
 
-    const totalPosts = userPosts.length;
-    const totalPages = Math.ceil(totalPosts / limit);
+        targetUser.role = ROLES.ADMIN;
+        break;
 
-    if (page > totalPages)
-      return next(
-        new ApiError(
-          400,
-          `Page ${page} does not exist. Total pages: ${totalPages}`,
-        ),
-      );
+      default:
+        throw new ApiError(400, "Invalid action");
+    }
 
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
+    await targetUser.save();
 
-    const paginatedPosts = userPosts.slice(startIndex, endIndex);
-
-    res.status(200).json({
-      success: true,
-      page,
-      limit,
-      totalPosts,
-      totalPages,
-      data: paginatedPosts,
-    });
+    return successResponse(res, 200, `User ${action}ed successfully`);
   } catch (error) {
     next(error);
   }
 };
 
-exports.getPostOfAUser = (req, res, next) => {
+//  USER POSTS
+exports.getAllPostsOfUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+
+    const targetUser = await getUser(userId);
+    if (!targetUser.isActive) throw new ApiError(403, "User inactive");
+
+    const { data, pagination } = await paginate({
+      model: POST,
+      filter: { userId, isDeleted: false },
+      page: pageNum,
+      limit: limitNum,
+      populate: { path: "userId", select: "name" },
+    });
+
+    return successResponse(res, 200, "User posts fetched", data, pagination);
+  } catch (error) {
+    next(error);
+  }
+};
+
+//  SINGLE POST
+exports.getPostOfUser = async (req, res, next) => {
   try {
     const { userId, postId } = req.params;
 
-    const posts = readJSON(POST_PATH);
+    const targetUser = await getUser(userId);
+    if (!targetUser.isActive) throw new ApiError(403, "User inactive");
 
-    const post = posts.find(
-      (p) => p.postId === postId && p.userId === userId && !p.isDeleted,
-    );
+    const post = await POST.findOne({
+      _id: postId,
+      userId,
+      isDeleted: false,
+    })
+      .populate("userId", "name")
+      .lean();
 
-    if (!post) return next(new ApiError(404, "Post not found for this user"));
+    if (!post) throw new ApiError(404, "Post not found");
 
-    res.status(200).json({
-      success: true,
-      data: post,
+    return successResponse(res, 200, "Post fetched", post);
+  } catch (error) {
+    next(error);
+  }
+};
+
+//  USER COMMENTS
+exports.getAllCommentsOfUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+
+    const targetUser = await getUser(userId);
+    if (!targetUser.isActive) throw new ApiError(403, "User inactive");
+
+    const { data, pagination } = await paginate({
+      model: COMMENT,
+      filter: { userId, isDeleted: false },
+      page: pageNum,
+      limit: limitNum,
+      populate: [
+        { path: "userId", select: "name" },
+        { path: "postId", select: "content" },
+      ],
     });
+
+    return successResponse(res, 200, "Comments fetched", data, pagination);
+  } catch (error) {
+    next(error);
+  }
+};
+
+//  SINGLE COMMENT
+exports.getCommentOfUser = async (req, res, next) => {
+  try {
+    const { userId, commentId } = req.params;
+
+    const targetUser = await getUser(userId);
+    if (!targetUser.isActive) throw new ApiError(403, "User inactive");
+
+    const comment = await COMMENT.findOne({
+      _id: commentId,
+      userId,
+      isDeleted: false,
+    })
+      .populate("userId", "name")
+      .populate("postId", "content")
+      .lean();
+
+    if (!comment) throw new ApiError(404, "Comment not found");
+
+    return successResponse(res, 200, "Comment fetched", comment);
   } catch (error) {
     next(error);
   }

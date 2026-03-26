@@ -2,7 +2,10 @@ exports.globalErrorHandler = (err, req, res, next) => {
   console.dir(err, { depth: null });
 
   if (err.name === "ValidationError") {
-    const message = err.details?.body?.[0]?.message || "Validation failed";
+    const message =
+      err.details?.body?.[0]?.message ||
+      err.details?.query?.[0]?.message ||
+      "Validation failed";
 
     return res.status(err.statusCode || 400).json({
       success: false,
@@ -10,17 +13,15 @@ exports.globalErrorHandler = (err, req, res, next) => {
     });
   }
 
-  if (err.status && err.message) {
-    return res.status(err.status).json({
+  if (err instanceof require("../utils/ApiError")) {
+    return res.status(err.statusCode).json({
       success: false,
       message: err.message,
     });
   }
 
-  res.status(500).json({
+  return res.status(500).json({
     success: false,
-    message: "Internal server error.",
+    message: "Internal server error",
   });
-
-  console.log(err);
 };

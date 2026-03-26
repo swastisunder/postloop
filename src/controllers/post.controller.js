@@ -1,166 +1,178 @@
-const { nanoid } = require("nanoid");
-const path = require("path");
-
-const { readJSON, writeJSON } = require("../utils/fileHandler");
 const ApiError = require("../utils/ApiError");
-const POST_PATH = path.join(__dirname, "../data/posts.json");
+const { successResponse } = require("../utils/ApiResponse");
+const { paginate } = require("../utils/pagination");
+const { ROLES } = require("../constant/role");
 
-exports.createPost = (req, res, next) => {
+const USER = require("../models/user.model");
+const POST = require("../models/post.model");
+const COMMENT = require("../models/comment.model");
+const { getUser, getPost } = require("../utils/dbHelper");
+
+//  CREATE POST
+
+exports.createPost = async (req, res, next) => {
   try {
     const { content } = req.body;
+    const { user, file } = req;
 
-    const posts = readJSON(POST_PATH);
-
-    const newPost = {
-      postId: nanoid(8),
-      userId: req.user.userId,
+    const post = await POST.create({
       content,
-      image: req.file ? req.file.filename : null,
+      image: file ? file.filename : null,
+      userId: user._id,
       likes: [],
       likeCount: 0,
       isDeleted: false,
-      deletedBy: null,
-      createdAt: new Date().toISOString(),
-    };
-
-    posts.push(newPost);
-    writeJSON(POST_PATH, posts);
-
-    res.status(201).json({
-      success: true,
-      message: "Post created successfully",
-      data: {
-        postId: newPost.postId,
-        userId: newPost.userId,
-        content: newPost.content,
-        image: newPost.image,
-      },
     });
+
+    return successResponse(res, 201, "Post created successfully", post);
   } catch (error) {
     next(error);
   }
 };
 
-exports.getPost = (req, res, next) => {
+//  GET ALL POSTS
+
+exports.getAllPosts = async (req, res, next) => {
   try {
-    const { postId } = req.params;
+    const {
+      query: { page = 1, limit = 10, userId },
+      user,
+    } = req;
 
-    const posts = readJSON(POST_PATH);
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
 
-    const post = posts.find((p) => p.postId === postId && !p.isDeleted);
+    const filter = { isDeleted: false };
 
-    if (!post) return next(new ApiError(404, "Post not found"));
+    if (userId) {
+      const targetUser =
+        userId === user._id.toString() ? user : await getUser(userId);
+      filter.userId = targetUser._id;
+    }
 
-    res.status(200).json({
-      success: true,
-      data: post,
+    const { data, pagination } = await paginate({
+      model: POST,
+      filter,
+      page: pageNum,
+      limit: limitNum,
+      populate: { path: "userId", select: "name" },
     });
-  } catch (error) {
-    next(error);
-  }
-};
 
-exports.updatePost = (req, res, next) => {
-  try {
-    const { postId } = req.params;
-    const { content } = req.body;
+    const result = { data, pagination };
 
-    const posts = readJSON(POST_PATH);
-
-    const postIndex = posts.findIndex(
-      (p) => p.postId === postId && !p.isDeleted,
+    return successResponse(
+      res,
+      200,
+      "Posts fetched successfully",
+      result.data,
+      result.pagination,
     );
+  } catch (error) {
+    next(error);
+  }
+};
 
-    if (postIndex === -1) return next(new ApiError(404, "Post not found"));
+//  GET SINGLE POST
 
-    const post = posts[postIndex];
+exports.getPost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
 
-    if (post.userId !== req.user.userId)
-      return next(new ApiError(403, "You cannot edit this post"));
+    const post = await POST.findOne({ _id: postId, isDeleted: false })
+      .populate("userId", "name")
+      .lean();
+
+    if (!post) throw new ApiError(404, "Post not found");
+
+    return successResponse(res, 200, "Post fetched successfully", post);
+  } catch (error) {
+    next(error);
+  }
+};
+
+//  UPDATE POST
+
+exports.updatePost = async (req, res, next) => {
+  try {
+    const {
+      params: { postId },
+      body: { content },
+      user,
+    } = req;
+
+    const post = await getPost(postId);
+
+    if (post.userId.toString() !== user._id.toString())
+      throw new ApiError(403, "Not authorized");
 
     if (content) post.content = content;
 
-    if (req.file) post.image = req.file.filename;
+    await post.save();
 
-    posts[postIndex] = post;
-
-    writeJSON(POST_PATH, posts);
-
-    res.status(200).json({
-      success: true,
-      message: "Post updated successfully",
-      data: {
-        postId: post.postId,
-        content: post.content,
-        image: post.image,
-      },
-    });
+    return successResponse(res, 200, "Post updated successfully", post);
   } catch (error) {
     next(error);
   }
 };
 
-exports.deletePost = (req, res, next) => {
+//  DELETE POST
+
+exports.deletePost = async (req, res, next) => {
   try {
     const { postId } = req.params;
+    const { user } = req;
 
-    const posts = readJSON(POST_PATH);
+    const post = await getPost(postId);
 
-    const postIndex = posts.findIndex(
-      (p) => p.postId === postId && !p.isDeleted,
-    );
-
-    if (postIndex === -1) return next(new ApiError(404, "Post not found"));
-
-    const post = posts[postIndex];
-
-    if (post.userId !== req.user.userId)
-      return next(new ApiError(403, "You cannot delete this post"));
+    if (
+      user.role !== ROLES.ADMIN &&
+      post.userId.toString() !== user._id.toString()
+    )
+      throw new ApiError(403, "Not authorized");
 
     post.isDeleted = true;
-    post.deletedBy = req.user.userId;
+    post.deletedBy = user._id;
 
-    posts[postIndex] = post;
+    await post.save();
 
-    writeJSON(POST_PATH, posts);
+    await COMMENT.updateMany(
+      { postId, isDeleted: false },
+      {
+        isDeleted: true,
+        deletedBy: user._id,
+        updatedAt: new Date(),
+      },
+    );
 
-    res.status(200).json({
-      success: true,
-      message: "Post deleted successfully",
-    });
+    return successResponse(res, 200, "Post deleted successfully");
   } catch (error) {
     next(error);
   }
 };
 
-exports.likePost = (req, res, next) => {
+//  LIKE POST
+
+exports.likePost = async (req, res, next) => {
   try {
     const { postId } = req.params;
-    const userId = req.user.userId;
+    const { user } = req;
 
-    const posts = readJSON(POST_PATH);
+    const post = await getPost(postId);
 
-    const postIndex = posts.findIndex(
-      (p) => p.postId === postId && !p.isDeleted,
-    );
+    const userId = user._id.toString();
 
-    if (postIndex === -1) return next(new ApiError(404, "Post not found"));
+    const alreadyLiked = post.likes.map((id) => id.toString()).includes(userId);
 
-    const post = posts[postIndex];
+    if (alreadyLiked)
+      post.likes = post.likes.filter((id) => id.toString() !== userId);
+    else post.likes.push(user._id);
 
-    if (post.likes.includes(userId))
-      return next(new ApiError(409, "You already liked this post"));
-
-    post.likes.push(userId);
     post.likeCount = post.likes.length;
 
-    posts[postIndex] = post;
+    await post.save();
 
-    writeJSON(POST_PATH, posts);
-
-    res.status(200).json({
-      success: true,
-      message: "Post liked successfully",
+    return successResponse(res, 200, "Like updated", {
+      liked: !alreadyLiked,
       likeCount: post.likeCount,
     });
   } catch (error) {
@@ -168,44 +180,62 @@ exports.likePost = (req, res, next) => {
   }
 };
 
-exports.getAllPosts = (req, res, next) => {
+//  GET COMMENTS OF POST
+
+exports.getAllCommentsOfPost = async (req, res, next) => {
   try {
-    let { page, limit, userId } = req.query;
+    const {
+      params: { postId },
+      query: { page = 1, limit = 10 },
+    } = req;
 
-    page = parseInt(page) || 1;
-    limit = Math.min(parseInt(limit) || 10, 50);
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
 
-    const posts = userId
-      ? readJSON(POST_PATH).filter((p) => p.userId === userId && !p.isDeleted)
-      : readJSON(POST_PATH).filter((p) => !p.isDeleted);
+    await getPost(postId);
 
-    const totalPosts = posts.length;
-
-    if (!totalPosts) return next(new ApiError(404, "No posts found"));
-
-    const totalPages = Math.ceil(totalPosts / limit) || 1;
-
-    if (page > totalPages)
-      return next(
-        new ApiError(
-          400,
-          `Page ${page} does not exist. Total pages: ${totalPages}`,
-        ),
-      );
-
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-
-    const paginatedPosts = posts.slice(startIndex, endIndex);
-
-    res.status(200).json({
-      success: true,
-      page,
-      limit,
-      totalPosts,
-      totalPages,
-      data: paginatedPosts,
+    const { data, pagination } = await paginate({
+      model: COMMENT,
+      filter: { postId, isDeleted: false },
+      page: pageNum,
+      limit: limitNum,
+      populate: { path: "userId", select: "name" },
     });
+
+    const result = { data, pagination };
+
+    return successResponse(
+      res,
+      200,
+      "Comments fetched successfully",
+      result.data,
+      result.pagination,
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+//  GET SINGLE COMMENT OF POST
+
+exports.getCommentOfPost = async (req, res, next) => {
+  try {
+    const { postId, commentId } = req.params;
+
+    await getPost(postId);
+
+    const comment = await COMMENT.findOne({
+      _id: commentId,
+      postId,
+      isDeleted: false,
+    })
+      .populate("userId", "name")
+      .populate("postId", "content")
+      .lean();
+
+    if (!comment) throw new ApiError(404, "Comment not found");
+
+    return successResponse(res, 200, "Comment fetched successfully", comment);
   } catch (error) {
     next(error);
   }

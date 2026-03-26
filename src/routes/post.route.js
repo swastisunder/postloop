@@ -1,27 +1,90 @@
-const postRouter = require("express").Router();
+const router = require("express").Router();
 const { validate } = require("express-validation");
 
 const { authenticate } = require("../middlewares/auth.middleware");
-const {createPost,getPost,updatePost,deletePost,likePost,getAllPosts} = require("../controllers/post.controller");
+const { authorize } = require("../middlewares/authorize.middleware");
+const { ROLES } = require("../constant/role");
 const upload = require("../middlewares/multer");
-const {createPostSchema,getPostsSchema} = require("../validations/post.validation");
 
+const {
+  createPost,
+  getAllPosts,
+  getPost,
+  updatePost,
+  deletePost,
+  likePost,
+  getAllCommentsOfPost,
+  getCommentOfPost,
+} = require("../controllers/post.controller");
 
-postRouter.route('/')
-// create post
-.post(authenticate,upload.single("image"),validate(createPostSchema),createPost)
-// get all post with pagination and get all post of a user
-.get(authenticate, validate(getPostsSchema), getAllPosts);
+const {
+  createPostSchema,
+  updatePostSchema,
+  postIdParamSchema,
+  getAllPostsSchema,
+  likePostSchema,
+  getAllCommentsOfPostSchema,
+  getCommentOfPostSchema,
+} = require("../validations/post.validation");
 
-postRouter.route('/:postId')
-// get a post
-.get(authenticate, getPost)
-// update a post
-.patch(authenticate,upload.single("image"),validate(createPostSchema),updatePost)
-// delete a post
-.delete(authenticate, deletePost);
+router.use(authenticate);
 
-// like 
-postRouter.post("/:postId/like", authenticate, likePost);
+router.post(
+  "/",
+  authorize(ROLES.USER),
+  upload.single("image"),
+  validate(createPostSchema),
+  createPost,
+);
 
-module.exports = postRouter;
+// userId:231321321
+router.get(
+  "/",
+  authorize(ROLES.ADMIN, ROLES.USER),
+  validate(getAllPostsSchema),
+  getAllPosts,
+);
+
+router.get(
+  "/:postId",
+  authorize(ROLES.ADMIN, ROLES.USER),
+  validate(postIdParamSchema),
+  getPost,
+);
+
+router.put(
+  "/:postId",
+  authorize(ROLES.USER),
+  validate(updatePostSchema),
+  updatePost,
+);
+
+router.delete(
+  "/:postId",
+  authorize(ROLES.ADMIN, ROLES.USER),
+  validate(postIdParamSchema),
+  deletePost,
+);
+
+router.put(
+  "/:postId/like",
+  authorize(ROLES.USER),
+  validate(likePostSchema),
+  likePost,
+);
+
+router.get(
+  "/:postId/comments",
+  authorize(ROLES.ADMIN, ROLES.USER),
+  validate(getAllCommentsOfPostSchema),
+  getAllCommentsOfPost,
+);
+
+router.get(
+  "/:postId/comments/:commentId",
+  authorize(ROLES.ADMIN, ROLES.USER),
+  validate(getCommentOfPostSchema),
+  getCommentOfPost,
+);
+
+module.exports = router;

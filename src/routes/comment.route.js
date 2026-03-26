@@ -1,17 +1,60 @@
-const commentRouter = require("express").Router();
+const router = require("express").Router();
 const { validate } = require("express-validation");
 
-const { createComment,deletePost,getAllComments } = require("../controllers/comment.controller");
 const { authenticate } = require("../middlewares/auth.middleware");
-const { createCommentSchema,getCommentsSchema } = require("../validations/comment.validation");
+const { authorize } = require("../middlewares/authorize.middleware");
+const { ROLES } = require("../constant/role");
 
-// create comment
-commentRouter.post("/",authenticate,validate(createCommentSchema),createComment);
+const {
+  createComment,
+  getAllComments,
+  getComment,
+  updateComment,
+  deleteComment,
+} = require("../controllers/comment.controller");
 
-// get all comment
-commentRouter.get('/',authenticate,validate(getCommentsSchema),getAllComments)
+const {
+  createCommentSchema,
+  updateCommentSchema,
+  commentIdParamSchema,
+  getAllCommentsSchema,
+} = require("../validations/comment.validation");
 
-// delete comment
-commentRouter.delete('/:commentId',authenticate,deletePost)
+router.use(authenticate);
 
-module.exports = commentRouter;
+router.post(
+  "/",
+  authorize(ROLES.USER),
+  validate(createCommentSchema),
+  createComment,
+);
+
+router.get(
+  "/",
+  authorize(ROLES.ADMIN),
+  validate(getAllCommentsSchema),
+  getAllComments,
+);
+
+router.get(
+  "/:commentId",
+  authorize(ROLES.ADMIN, ROLES.USER),
+  validate(commentIdParamSchema),
+  getComment,
+);
+
+router.put(
+  "/:commentId",
+  authorize(ROLES.USER),
+  validate(updateCommentSchema),
+  updateComment,
+);
+
+router.delete(
+  "/:commentId",
+  authorize(ROLES.ADMIN, ROLES.USER),
+  validate(commentIdParamSchema),
+  deleteComment,
+);
+
+module.exports = router;
